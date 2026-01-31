@@ -1,7 +1,8 @@
 streamlit
 pandas
 plotly
+scikit-learn
 openpyxl
 pyarrow
-scikit-learn
 numpy
+matplotlib
