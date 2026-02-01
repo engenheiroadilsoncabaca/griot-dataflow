@@ -21,8 +21,7 @@ colors = {
     "deadly_depths": "#111144"    # Rodapé / Fundo Escuro
 }
 
-# --- ESTILIZAÇÃO CSS CUSTOMIZADA (PADRONIZAÇÃO TOTAL) --
-# --- ESTILIZAÇÃO CSS CUSTOMIZADA (CORREÇÃO TOTAL DE CORES) ---
+# --- ESTILIZAÇÃO CSS CUSTOMIZADA 
 st.markdown(f"""
     <style>
     /* 1. FUNDO GERAL */
