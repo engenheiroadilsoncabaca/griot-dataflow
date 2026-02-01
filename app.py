@@ -21,7 +21,8 @@ colors = {
     "deadly_depths": "#111144"    # Rodapé / Fundo Escuro
 }
 
-# --- ESTILIZAÇÃO CSS CUSTOMIZADA (PADRONIZAÇÃO TOTAL) ---
+# --- ESTILIZAÇÃO CSS CUSTOMIZADA (PADRONIZAÇÃO TOTAL) --
+# --- ESTILIZAÇÃO CSS CUSTOMIZADA (CORREÇÃO TOTAL DE CORES) ---
 st.markdown(f"""
     <style>
     /* 1. FUNDO GERAL */
@@ -29,128 +30,74 @@ st.markdown(f"""
         background-color: {colors['luster_white']};
     }}
 
-    /* 2. REGRA DE OURO: TUDO NA ÁREA PRINCIPAL É AZUL ESCURO */
-    /* Isso força todos os textos, títulos, labels, parágrafos, inputs a serem Deep Royal */
-    .main .block-container, 
-    .main .block-container div, 
-    .main .block-container p, 
-    .main .block-container span, 
-    .main .block-container label, 
-    .main .block-container h1, 
-    .main .block-container h2, 
-    .main .block-container h3, 
-    .main .block-container h4, 
-    .main .block-container h5, 
-    .main .block-container h6,
-    .stRadio label, .stCheckbox label, .stSelectbox label, .stMultiSelect label {{
+    /* 2. FORÇAR COR EM TODOS OS TÍTULOS (H1, H2, H3...) */
+    h1, h2, h3, h4, h5, h6, .stHeadingContainer {{
         color: {colors['deep_royal']} !important;
     }}
 
-    /* 3. EXCEÇÃO 1: SIDEBAR (MANTÉM TEXTO BRANCO/CLARO) */
+    /* 3. CORREÇÃO DAS MÉTRICAS (Números e Legendas que estavam sumindo) */
+    [data-testid="stMetricLabel"] {{
+        color: {colors['deep_royal']} !important;
+        font-weight: bold;
+        opacity: 0.9;
+    }}
+    [data-testid="stMetricValue"] {{
+        color: {colors['deep_royal']} !important;
+    }}
+    
+    /* 4. TEXTOS GERAIS (Parágrafos e Listas) */
+    .stMarkdown p, .stMarkdown li, .stMarkdown div {{
+        color: {colors['deep_royal']} !important;
+    }}
+
+    /* 5. BARRA LATERAL (Manter texto claro lá) */
     [data-testid="stSidebar"] {{
         background-color: {colors['deep_royal']};
     }}
-    [data-testid="stSidebar"] *, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {{
+    [data-testid="stSidebar"] * {{
         color: {colors['luster_white']} !important;
     }}
-
-    /* 4. EXCEÇÃO 2: TABELAS (DATAFRAME) - MANTÉM PRETO PARA LEITURA */
-    [data-testid="stDataFrame"] *, [data-testid="stDataFrame"] div, [data-testid="stDataFrame"] span {{
-        color: black !important;
-    }}
-
-    /* 5. EXCEÇÃO 3: BOTÕES (TEXTO BRANCO) */
-    .stButton > button {{
-        background-color: {colors['habanero']};
-        color: white !important;
-        border: none;
-        border-radius: 8px;
-        height: 3em;
-        font-weight: bold;
-    }}
-    .stButton > button:hover {{
-        background-color: #d16e0b;
-        color: white !important;
-        border: 1px solid white;
-    }}
-    /* Garante que o texto dentro do botão seja branco (mesmo com a regra global) */
-    .stButton > button p {{
-        color: white !important;
-    }}
-
-    /* 6. EXCEÇÃO 4: ABAS ATIVAS (TEXTO BRANCO) */
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 8px;
-    }}
-    .stTabs [data-baseweb="tab"] {{
-        background-color: {colors['jodhpur_tan']};
-        border-radius: 5px 5px 0 0;
-        padding: 10px 20px;
-    }}
-    .stTabs [aria-selected="true"] {{
-        background-color: {colors['habanero']} !important;
-    }}
-    /* Texto da aba ativa deve ser branco */
-    .stTabs [aria-selected="true"] p {{
-        color: white !important;
-    }}
-
-    /* 7. RODAPÉ */
-    .footer {{
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: {colors['deadly_depths']};
-        text-align: center;
-        padding: 10px;
-        font-family: 'Helvetica Neue', sans-serif;
-        font-size: 14px;
-        z-index: 999;
-        border-top: 3px solid {colors['habanero']};
-    }}
-    .footer p {{
-        color: {colors['aster_blue']} !important;
-        margin: 0;
-    }}
     
-    .block-container {{
-        padding-bottom: 80px;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-st.markdown(f"""
-    <style>
-    /* --- CORREÇÃO ESPECÍFICA PARA O UPLOAD (CAIXA BRANCA) --- */
-    
-    /* 1. A zona de drop (fundo e borda) */
+    /* 6. CORREÇÃO DO UPLOAD (Caixa arrastar e soltar) */
     section[data-testid="stFileUploaderDropzone"] {{
         background-color: white !important;
         border: 2px dashed {colors['aster_blue']} !important;
     }}
-
-    /* 2. Todos os textos dentro da zona de drop (Drag and drop..., Limit...) */
-    section[data-testid="stFileUploaderDropzone"] div, 
     section[data-testid="stFileUploaderDropzone"] span, 
     section[data-testid="stFileUploaderDropzone"] small {{
-        color: {colors['deep_royal']} !important; /* Azul Escuro */
+        color: {colors['deep_royal']} !important;
+    }}
+    section[data-testid="stFileUploaderDropzone"] button {{
+        background-color: {colors['habanero']} !important;
+        color: white !important;
+        border: none !important;
     }}
 
-    /* 3. O Botão "Browse files" específico */
-    section[data-testid="stFileUploaderDropzone"] button {{
-        background-color: {colors['jodhpur_tan']} !important; /* Bege Jodhpur */
-        color: {colors['deep_royal']} !important; /* Texto Azul Escuro */
-        border: 1px solid {colors['deep_royal']} !important;
-        font-weight: bold;
+    /* 7. BOTÕES E ABAS */
+    .stButton>button {{
+        background-color: {colors['habanero']};
+        color: white !important;
+        border: none;
     }}
-    
-    /* 4. Efeito Hover no botão Browse */
-    section[data-testid="stFileUploaderDropzone"] button:hover {{
-        background-color: {colors['aster_blue']} !important;
+    .stTabs [aria-selected="true"] {{
+        background-color: {colors['habanero']} !important;
+    }}
+    .stTabs [aria-selected="true"] p {{
         color: white !important;
     }}
+    
+    /* 8. RODAPÉ */
+    .footer {{
+        position: fixed; left: 0; bottom: 0; width: 100%;
+        background-color: {colors['deadly_depths']};
+        text-align: center; padding: 10px; z-index: 999;
+        border-top: 3px solid {colors['habanero']};
+    }}
+    .footer p {{ color: {colors['aster_blue']} !important; margin: 0; }}
+    .block-container {{ padding-bottom: 80px; }}
     </style>
 """, unsafe_allow_html=True)
+
 
 # --- FUNÇÕES AUXILIARES ---
 @st.cache_data
@@ -210,7 +157,7 @@ with st.sidebar:
 
     if st.session_state.df is not None:
         st.markdown("---")
-        if st.button("🔄 Reiniciar Dataset"):
+        if st.button(" Reiniciar Dataset"):
             st.session_state.df = st.session_state.df_original.copy()
             st.rerun()
         
@@ -256,7 +203,7 @@ if st.session_state.df is not None:
         with c2:
             if option == "Excluir Colunas":
                 cols = st.multiselect("Colunas:", df.columns)
-                if st.button("🗑️ Excluir"):
+                if st.button(" Excluir"):
                     st.session_state.df = df.drop(columns=cols)
                     st.rerun()
             elif option == "Tratar Nulos":
