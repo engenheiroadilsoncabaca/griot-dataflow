@@ -1,304 +1,269 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import os
+import sqlite3
+import streamlit_authenticator as stauth
+import bcrypt
+from sqlalchemy import create_engine
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
-import numpy as np
-import os
+from sklearn.metrics import accuracy_score, r2_score, confusion_matrix
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="GRIOT AI - DataFlow", layout="wide", page_icon="🔹")
+# ==========================================
+# 1. CONFIGURAÇÃO INICIAL E ESTILOS
+# ==========================================
+st.set_page_config(page_title="DataFlow Studio", page_icon="", layout="wide")
 
-# --- DEFINIÇÃO DA PALETA DE CORES (GRIOT AI) ---
+# CSS da GRIOT AI
 colors = {
-    "luster_white": "#F4F1EC",    # Fundo Principal
-    "aster_blue": "#9BACD8",      # Detalhes Suaves
-    "habanero": "#F98513",        # Botões / Destaque (Laranja)
-    "jodhpur_tan": "#DAD1C8",     # Bordas / Secundário
-    "deep_royal": "#223382",      # COR PADRÃO DO TEXTO
-    "deadly_depths": "#111144"    # Rodapé / Fundo Escuro
+    'luster_white': '#F4F1EC', 'deep_royal': '#223382',
+    'habanero': '#F98513', 'aster_blue': '#798ECA', 'deadly_depths': '#15172C'
 }
-
-# --- ESTILIZAÇÃO CSS CUSTOMIZADA 
 st.markdown(f"""
     <style>
-    /* 1. FUNDO GERAL */
-    .stApp {{
-        background-color: {colors['luster_white']};
-    }}
-
-    /* 2. FORÇAR COR EM TODOS OS TÍTULOS (H1, H2, H3...) */
-    h1, h2, h3, h4, h5, h6, .stHeadingContainer {{
-        color: {colors['deep_royal']} !important;
-    }}
-
-    /* 3. CORREÇÃO DAS MÉTRICAS (Números e Legendas que estavam sumindo) */
-    [data-testid="stMetricLabel"] {{
-        color: {colors['deep_royal']} !important;
-        font-weight: bold;
-        opacity: 0.9;
-    }}
-    [data-testid="stMetricValue"] {{
-        color: {colors['deep_royal']} !important;
-    }}
-    
-    /* 4. TEXTOS GERAIS (Parágrafos e Listas) */
-    .stMarkdown p, .stMarkdown li, .stMarkdown div {{
-        color: {colors['deep_royal']} !important;
-    }}
-
-    /* 5. BARRA LATERAL (Manter texto claro lá) */
-    [data-testid="stSidebar"] {{
-        background-color: {colors['deep_royal']};
-    }}
-    [data-testid="stSidebar"] * {{
-        color: {colors['luster_white']} !important;
-    }}
-    
-    /* 6. CORREÇÃO DO UPLOAD (Caixa arrastar e soltar) */
-    section[data-testid="stFileUploaderDropzone"] {{
-        background-color: white !important;
-        border: 2px dashed {colors['aster_blue']} !important;
-    }}
-    section[data-testid="stFileUploaderDropzone"] span, 
-    section[data-testid="stFileUploaderDropzone"] small {{
-        color: {colors['deep_royal']} !important;
-    }}
-    section[data-testid="stFileUploaderDropzone"] button {{
-        background-color: {colors['habanero']} !important;
-        color: white !important;
-        border: none !important;
-    }}
-
-    /* 7. BOTÕES E ABAS */
-    .stButton>button {{
-        background-color: {colors['habanero']};
-        color: white !important;
-        border: none;
-    }}
-    .stTabs [aria-selected="true"] {{
-        background-color: {colors['habanero']} !important;
-    }}
-    .stTabs [aria-selected="true"] p {{
-        color: white !important;
-    }}
-    
-    /* 8. RODAPÉ */
-    .footer {{
-        position: fixed; left: 0; bottom: 0; width: 100%;
-        background-color: {colors['deadly_depths']};
-        text-align: center; padding: 10px; z-index: 999;
-        border-top: 3px solid {colors['habanero']};
-    }}
-    .footer p {{ color: {colors['aster_blue']} !important; margin: 0; }}
+    .stApp {{ background-color: {colors['luster_white']}; }}
+    h1, h2, h3, h4, h5, h6, .stHeadingContainer {{ color: {colors['deep_royal']} !important; }}
+    [data-testid="stMetricLabel"] {{ color: {colors['deep_royal']} !important; font-weight: bold; }}
+    [data-testid="stMetricValue"] {{ color: {colors['deep_royal']} !important; }}
+    .stMarkdown p, .stMarkdown li {{ color: {colors['deep_royal']} !important; }}
+    [data-testid="stSidebar"] {{ background-color: {colors['deep_royal']}; }}
+    [data-testid="stSidebar"] * {{ color: {colors['luster_white']} !important; }}
+    .stButton>button {{ background-color: {colors['habanero']}; color: white !important; border: none; }}
+    .stTabs [aria-selected="true"] {{ background-color: {colors['habanero']} !important; }}
+    .stTabs [aria-selected="true"] p {{ color: white !important; }}
     .block-container {{ padding-bottom: 80px; }}
     </style>
 """, unsafe_allow_html=True)
 
+# ==========================================
+# 2. BANCO DE DADOS DE USUÁRIOS (Contas)
+# ==========================================
+# Cria/Conecta ao banco local para salvar os cadastros
+conn_users = sqlite3.connect('users.db', check_same_thread=False)
+c = conn_users.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS users
+             (username TEXT PRIMARY KEY, name TEXT, email TEXT, password TEXT)''')
+conn_users.commit()
 
-# --- FUNÇÕES AUXILIARES ---
-@st.cache_data
-def convert_df(df):
-    return df.to_csv(index=False).encode('utf-8')
+# Função para buscar usuários do banco
+def get_users():
+    c.execute("SELECT * FROM users")
+    users_db = c.fetchall()
+    credentials = {"usernames": {}}
+    for user in users_db:
+        credentials["usernames"][user[0]] = {"name": user[1], "email": user[2], "password": user[3]}
+    return credentials
 
-def load_data(file):
-    try:
-        if file.name.endswith('.csv'):
+# ==========================================
+# 3. SISTEMA DE LOGIN E CADASTRO
+# ==========================================
+credentials = get_users()
+
+authenticator = stauth.Authenticate(
+    credentials,
+    "dataflow_cookie",
+    "griot_key_super_secreta_e_segura_2026",
+    cookie_expiry_days=30
+)
+
+# Verifica se o usuário está logado
+if 'authentication_status' not in st.session_state:
+    st.session_state['authentication_status'] = None
+
+if not st.session_state['authentication_status']:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(f"<h1 style='text-align: center;'>🔐 DataFlow Studio</h1>", unsafe_allow_html=True)
+        
+        tab_login, tab_cadastro = st.tabs(["Entrar", "Criar Conta"])
+        
+        with tab_login:
+            # Formulário nativo do Authenticator (Versão mais recente)
+            authenticator.login(location="main")
+            
+            if st.session_state["authentication_status"] is False:
+                st.error("Usuário ou senha incorretos")
+            elif st.session_state["authentication_status"] is None:
+                st.warning("Insira suas credenciais")
+
+        with tab_cadastro:
+            st.subheader("Novo Usuário")
+            new_user = st.text_input("Usuário (Login)")
+            new_name = st.text_input("Nome Completo")
+            new_email = st.text_input("E-mail")
+            new_password = st.text_input("Senha", type="password")
+            
+            if st.button("Cadastrar e Criptografar"):
+                if new_user and new_password:
+                    try:
+                        # Criptografa a senha antes de salvar
+                        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                        c.execute("INSERT INTO users (username, name, email, password) VALUES (?, ?, ?, ?)",
+                                  (new_user, new_name, new_email, hashed_password))
+                        conn_users.commit()
+                        st.success("Conta criada com sucesso! Você já pode fazer login na aba 'Entrar'.")
+                    except sqlite3.IntegrityError:
+                        st.error("Este nome de usuário já existe. Tente outro.")
+                else:
+                    st.warning("Preencha todos os campos.")
+
+# ==========================================
+# O APLICATIVO REAL (PÓS-LOGIN)
+# ==========================================
+if st.session_state['authentication_status']:
+    
+    authenticator.logout(button_name='Sair (Logout)', location='sidebar')
+    st.sidebar.title(f"Bem-vindo, {st.session_state['name']}!")
+    
+    st.markdown(f"<h1>DataFlow Studio <span style='color:{colors['habanero']}; font-size: 0.6em;'>by Griot AI</span></h1>", unsafe_allow_html=True)
+
+    # Armazena o DataFrame na sessão para não perder os dados ao trocar de abas
+    if 'df' not in st.session_state:
+        st.session_state['df'] = None
+
+    # ==========================================
+    # 4. ENTRADA DE DADOS (Arquivo vs SQL)
+    # ==========================================
+    st.write("### Fonte de Dados")
+    tab_arq, tab_sql = st.tabs(["📂 Upload de Arquivo", "🗄️ Conectar Banco SQL"])
+    
+    with tab_arq:
+        uploaded_file = st.file_uploader("Suba seu arquivo (CSV ou Excel)", type=["csv", "xlsx"])
+        if uploaded_file is not None:
             try:
-                return pd.read_csv(file)
-            except UnicodeDecodeError:
-                file.seek(0)
-                try:
-                    return pd.read_csv(file, encoding='latin-1', sep=';')
-                except:
-                    file.seek(0)
-                    return pd.read_csv(file, encoding='latin-1')
-        elif file.name.endswith('.xlsx') or file.name.endswith('.xls'):
-            return pd.read_excel(file)
-        elif file.name.endswith('.parquet'):
-            return pd.read_parquet(file)
-    except Exception as e:
-        st.error(f"Erro crítico: {e}")
-        return None
+                if uploaded_file.name.endswith('.csv'):
+                    st.session_state['df'] = pd.read_csv(uploaded_file)
+                else:
+                    st.session_state['df'] = pd.read_excel(uploaded_file)
+                st.success("Arquivo carregado com sucesso!")
+            except Exception as e:
+                st.error(f"Erro ao ler arquivo: {e}")
 
-# --- ESTADO ---
-if 'df' not in st.session_state:
-    st.session_state.df = None
-if 'df_original' not in st.session_state:
-    st.session_state.df_original = None
+    with tab_sql:
+        st.info("Conecte-se diretamente ao banco de dados da sua empresa.")
+        c1, c2 = st.columns(2)
+        db_type = c1.selectbox("Tipo de Banco", ["mysql+pymysql", "postgresql", "sqlite"], key="sql_tipo")
+        db_host = c2.text_input("Host (ex: localhost...)", placeholder="127.0.0.1", key="sql_host")
+        db_port = c1.text_input("Porta (MySQL: 3306...)", placeholder="3306", key="sql_porta")
+        db_user = c2.text_input("Usuário", key="sql_user")
+        db_pass = c1.text_input("Senha", type="password", key="sql_pass")
+        db_name = c2.text_input("Nome do Banco", key="sql_db")
+        
+        query = st.text_area("Consulta (Query)", "SELECT * FROM sua_tabela LIMIT 5000")
+        
+        if st.button("Executar Query e Importar"):
+            try:
+                with st.spinner("Conectando ao servidor..."):
+                    # Monta a String de Conexão
+                    if db_type == "sqlite":
+                        uri = f"sqlite:///{db_name}" # SQLite é local
+                    else:
+                        uri = f"{db_type}://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+                    
+                    engine = create_engine(uri)
+                    st.session_state['df'] = pd.read_sql(query, engine)
+                    st.success("Dados importados com sucesso via SQL!")
+            except Exception as e:
+                st.error(f"Erro de conexão: {e}")
 
-# --- SIDEBAR (IDENTIDADE VISUAL) ---
-with st.sidebar:
-    # Tenta carregar logo em vários formatos
-    if os.path.exists("logo_griot.png"):
-        st.image("logo_griot.png", use_container_width=True)
-    elif os.path.exists("logo_griot.jpeg"):
-        st.image("logo_griot.jpeg", use_container_width=True)
-    elif os.path.exists("WhatsApp Image 2026-01-08 at 23.46.19.jpeg"):
-        st.image("WhatsApp Image 2026-01-08 at 23.46.19.jpeg", use_container_width=True)
-    else:
-        st.markdown(f"<h1 style='text-align: center; color: white;'>GRIOT AI</h1>", unsafe_allow_html=True)
-    
     st.markdown("---")
-    st.markdown("### 📂 Central de Dados")
-    uploaded_file = st.file_uploader("Carregar Arquivo", type=['csv', 'xlsx', 'parquet'])
-    
-    if uploaded_file is not None:
-        if st.session_state.df is None: 
-            df = load_data(uploaded_file)
-            if df is not None:
-                st.session_state.df = df
-                st.session_state.df_original = df.copy()
-                st.success(" Carregado!")
+
+    # ==========================================
+    # 5. ANÁLISE E MACHINE LEARNING
+    # ==========================================
+    if st.session_state['df'] is not None:
+        df = st.session_state['df']
+        
+        t1, t2, t3, t4 = st.tabs([" Overview", " Limpeza", " Visual", " AutoML"])
+
+        with t1:
+            st.subheader("Raio-X dos Dados")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Variáveis", df.shape[1])
+            c2.metric("Observações", df.shape[0])
+            nulos_totais = df.isnull().sum().sum()
+            c3.metric("Nulos", f"{nulos_totais}")
+            c4.metric("Duplicatas", df.duplicated().sum())
+            st.dataframe(df.head(10), use_container_width=True)
+
+        with t2:
+            st.subheader(" Limpeza Expressa")
+            c1, c2, c3 = st.columns(3)
+            if c1.button("Remover Duplicatas"):
+                df.drop_duplicates(inplace=True)
+                st.session_state['df'] = df
+                st.success("Duplicatas removidas!")
+                st.rerun()
+            if c2.button("Remover Nulos"):
+                df.dropna(inplace=True)
+                st.session_state['df'] = df
+                st.success("Linhas nulas removidas!")
+                st.rerun()
+            if c3.button("Preencher Nulos (Zero/Vazio)"):
+                for col in df.columns:
+                    if df[col].dtype == 'object':
+                        df[col].fillna("Vazio", inplace=True)
+                    else:
+                        df[col].fillna(0, inplace=True)
+                st.session_state['df'] = df
+                st.success("Nulos preenchidos!")
                 st.rerun()
 
-    if st.session_state.df is not None:
-        st.markdown("---")
-        if st.button(" Reiniciar Dataset"):
-            st.session_state.df = st.session_state.df_original.copy()
-            st.rerun()
-        
-        st.info(f" Linhas: {st.session_state.df.shape[0]}\n Colunas: {st.session_state.df.shape[1]}")
+        with t3:
+            st.subheader(" Gráficos Interativos")
+            tipo = st.selectbox("Tipo", ["Dispersão (Scatter)", "Barras", "Boxplot"])
+            c1, c2, c3 = st.columns(3)
+            col_x = c1.selectbox("Eixo X", df.columns)
+            col_y = c2.selectbox("Eixo Y", df.columns)
+            col_cor = c3.selectbox("Cor (Opcional)", ["Nenhum"] + list(df.columns))
+            cor = None if col_cor == "Nenhum" else col_cor
 
-# --- APP PRINCIPAL ---
-st.markdown(f"<h1 style='color:{colors['deep_royal']}'>DataFlow Studio <span style='font-size:0.5em; color:{colors['habanero']}'>by Griot AI</span></h1>", unsafe_allow_html=True)
+            if st.button("Gerar Gráfico"):
+                try:
+                    if tipo == "Dispersão (Scatter)": fig = px.scatter(df, x=col_x, y=col_y, color=cor)
+                    elif tipo == "Barras": fig = px.bar(df, x=col_x, y=col_y, color=cor)
+                    elif tipo == "Boxplot": fig = px.box(df, x=col_x, y=col_y, color=cor)
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.error("Erro ao gerar gráfico. Verifique o tipo das colunas.")
 
-if st.session_state.df is not None:
-    df = st.session_state.df
+        with t4:
+            st.subheader(" AutoML Machine Learning")
+            c1, c2 = st.columns([1,2])
+            with c1:
+                target = st.selectbox("O que prever? (Target)", df.columns)
+                features = st.multiselect("Features", [c for c in df.columns if c != target])
+                split = st.slider("Tamanho Teste (%)", 10, 50, 20)
+                btn_train = st.button("Treinar Modelo")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        " Overview", " Limpeza", " Visual", " AutoML", " Exportar"
-    ])
-
-    # --- ABA 1: OVERVIEW ---
-    with tab1:
-        st.subheader("Raio-X dos Dados")
-        
-        c1, c2, c3, c4 = st.columns(4)
-        total = df.size
-        missing = df.isnull().sum().sum()
-        
-        c1.metric("Variáveis", df.shape[1])
-        c2.metric("Observações", df.shape[0])
-        c3.metric("Nulos", f"{missing} ({(missing/total)*100:.1f}%)")
-        c4.metric("Duplicatas", df.duplicated().sum())
-        
-        st.divider()
-        st.dataframe(df.head(), use_container_width=True)
-        
-        st.write("##### Saúde das Colunas")
-        dtypes = pd.DataFrame({'Tipo': df.dtypes, 'Nulos': df.isnull().sum(), '% Nulos': (df.isnull().sum()/len(df))*100})
-        st.dataframe(dtypes.style.background_gradient(cmap='Oranges', subset=['% Nulos']), use_container_width=True)
-
-    # --- ABA 2: LIMPEZA ---
-    with tab2:
-        st.subheader("Tratamento de Dados")
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            st.markdown("#### Ferramenta:")
-            option = st.radio("Ação:", ["Excluir Colunas", "Tratar Nulos", "Remover Duplicatas", "Renomear"], label_visibility="collapsed")
-        with c2:
-            if option == "Excluir Colunas":
-                cols = st.multiselect("Colunas:", df.columns)
-                if st.button(" Excluir"):
-                    st.session_state.df = df.drop(columns=cols)
-                    st.rerun()
-            elif option == "Tratar Nulos":
-                cols_null = df.columns[df.isnull().any()]
-                if len(cols_null) > 0:
-                    col = st.selectbox("Coluna:", cols_null)
-                    method = st.selectbox("Ação:", ["Remover Linhas", "Média", "Mediana", "Zero/Valor"])
-                    if st.button("Aplicar"):
-                        if method == "Remover Linhas": st.session_state.df = df.dropna(subset=[col])
-                        elif method == "Média": st.session_state.df[col] = df[col].fillna(df[col].mean())
-                        elif method == "Mediana": st.session_state.df[col] = df[col].fillna(df[col].median())
-                        elif method == "Zero/Valor": st.session_state.df[col] = df[col].fillna(0)
-                        st.rerun()
-                else:
-                    st.success("Sem dados nulos!")
-            elif option == "Remover Duplicatas":
-                if st.button("Aplicar"):
-                    st.session_state.df = df.drop_duplicates()
-                    st.rerun()
-            elif option == "Renomear":
-                col = st.selectbox("Coluna:", df.columns)
-                novo = st.text_input("Novo nome:")
-                if st.button("Renomear"):
-                    st.session_state.df = df.rename(columns={col: novo})
-                    st.rerun()
-                    
-        st.dataframe(st.session_state.df.head(3), use_container_width=True)
-
-    # --- ABA 3: VISUAL ---
-    with tab3:
-        st.subheader("Análise Gráfica")
-        tipo = st.selectbox("Visualização:", ["Histograma", "Dispersão", "Correlação"])
-        if tipo == "Histograma":
-            cx = st.selectbox("Eixo X:", df.select_dtypes(include='number').columns)
-            if cx: st.plotly_chart(px.histogram(df, x=cx, color_discrete_sequence=[colors['habanero']]), use_container_width=True)
-        elif tipo == "Dispersão":
-            c1, c2 = st.columns(2)
-            cx = c1.selectbox("Eixo X:", df.select_dtypes(include='number').columns, key='vx')
-            cy = c2.selectbox("Eixo Y:", df.select_dtypes(include='number').columns, key='vy')
-            if cx and cy: st.plotly_chart(px.scatter(df, x=cx, y=cy, color_discrete_sequence=[colors['deep_royal']]), use_container_width=True)
-        elif tipo == "Correlação":
-            num = df.select_dtypes(include='number')
-            if not num.empty: st.plotly_chart(px.imshow(num.corr(), text_auto=True, color_continuous_scale='RdBu'), use_container_width=True)
-
-    # --- ABA 4: AUTOML ---
-    with tab4:
-        st.subheader(" AutoML GRIOT")
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            target = st.selectbox("Alvo (Target):", df.columns)
-            feats = st.multiselect("Features:", [c for c in df.columns if c != target], default=[c for c in df.columns if c != target])
-            btn = st.button(" Treinar Modelo")
-        with c2:
-            if btn:
-                df_ml = df[feats + [target]].dropna()
-                X = pd.get_dummies(df_ml[feats], drop_first=True)
-                y = df_ml[target]
-                
-                # Regressão ou Classificação?
-                is_class = False
-                if y.dtype == 'object' or y.nunique() < 20:
-                    is_class = True
-                    le = LabelEncoder()
-                    y = le.fit_transform(y)
-                
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-                
-                if is_class:
-                    mdl = RandomForestClassifier()
-                    mdl.fit(X_train, y_train)
-                    acc = accuracy_score(y_test, mdl.predict(X_test))
-                    st.success(f"Acurácia: {acc:.1%}")
-                else:
-                    mdl = RandomForestRegressor()
-                    mdl.fit(X_train, y_train)
-                    r2 = r2_score(y_test, mdl.predict(X_test))
-                    st.success(f"R² Score: {r2:.2f}")
-
-    # --- ABA 5: EXPORTAR ---
-    with tab5:
-        st.subheader("Exportar")
-        st.download_button(" Baixar Dataset Limpo", data=convert_df(df), file_name='griot_dataflow.csv', mime='text/csv')
-
-else:
-    # TELA DE WELCOME
-    st.markdown(f"""
-    <div style="text-align: center; padding: 50px; background-color: white; border-radius: 10px; border: 1px solid {colors['aster_blue']};">
-        <h1 style="color: {colors['deep_royal']};">Bem-vindo ao DataFlow Studio</h1>
-        <p style="color: {colors['habanero']}; font-weight: bold;">POWERED BY GRIOT AI</p>
-        <p style="color: gray;">Carregue seus dados na barra lateral para iniciar a análise.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# --- RODAPÉ FIXO ---
-st.markdown("""
-    <div class="footer">
-        <p>Desenvolvido por <b>GRIOT AI</b> @2026 | DataFlow Studio v5.0</p>
-    </div>
-    """, unsafe_allow_html=True)
+            with c2:
+                if btn_train and features:
+                    try:
+                        df_ml = df[features + [target]].dropna()
+                        
+                        # Proteção de Memória
+                        high_cardinality = [col for col in features if df_ml[col].dtype == 'object' and df_ml[col].nunique() > 50]
+                        if high_cardinality:
+                            st.error(f"Remova colunas com muitos textos únicos para não travar: {high_cardinality}")
+                        else:
+                            X = pd.get_dummies(df_ml[features], drop_first=True)
+                            y = df_ml[target]
+                            
+                            is_class = (y.dtype == 'object' or y.nunique() < 20)
+                            if is_class: y = LabelEncoder().fit_transform(y)
+                            
+                            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=split/100, random_state=42)
+                            
+                            with st.spinner("Treinando..."):
+                                if is_class:
+                                    model = RandomForestClassifier(n_estimators=50, max_depth=10).fit(X_train, y_train)
+                                    acc = accuracy_score(y_test, model.predict(X_test))
+                                    st.success(f"Classificação - Acurácia: {acc:.1%}")
+                                else:
+                                    model = RandomForestRegressor(n_estimators=50, max_depth=10).fit(X_train, y_train)
+                                    st.success(f"Regressão - R²: {r2_score(y_test, model.predict(X_test)):.2f}")
+                    except Exception as e:
+                        st.error(f"Erro no treinamento: {e}")

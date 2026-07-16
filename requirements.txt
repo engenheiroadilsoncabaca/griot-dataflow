@@ -6,3 +6,7 @@ openpyxl
 pyarrow
 numpy
 matplotlib
+streamlit-authenticator
+fpdf
+shap
+SQLAlchemy
